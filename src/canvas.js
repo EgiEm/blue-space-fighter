@@ -1,12 +1,12 @@
-import platform from '../../img/platform.png'
-import hills from '../../img/hills.png'
-import background from '../../img/background.png'
-import platformSmallTall from '../../img/platformSmallTall.png'
+import platform from '../img/platform.png'
+import hills from '../img/hills.png'
+import background from '../img/background.png'
+import platformSmallTall from '../img/platformSmallTall.png'
 
-import spriteRunLeft from '../../img/spriteRunLeft.png'
-import spriteRunRight from '../../img/spriteRunRight.png'
-import spriteStandLeft from '../../img/spriteStandLeft.png'
-import spriteStandRight from '../../img/spriteStandRight.png'
+import spriteRunLeft from '../img/spriteRunLeft.png'
+import spriteRunRight from '../img/spriteRunRight.png'
+import spriteStandLeft from '../img/spriteStandLeft.png'
+import spriteStandRight from '../img/spriteStandRight.png'
 
 const canvas = document.querySelector('canvas')
 const c = canvas.getContext('2d')
@@ -317,30 +317,24 @@ function createMissionPlatforms() {
     return [
       new Platform({ x: -1, y: 470, image: platformImage }),
       new Platform({ x: platformImage.width - 3, y: 470, image: platformImage }),
-
       new Platform({ x: platformImage.width * 2 + 300, y: 470, image: platformImage }),
       new Platform({ x: platformImage.width * 3 + 480, y: 405, image: platformImage }),
-
       new Platform({
         x: platformImage.width * 4 + 850,
         y: 290,
         image: platformSmallTallImage
       }),
-
       new Platform({ x: platformImage.width * 5 + 1200, y: 470, image: platformImage }),
       new Platform({ x: platformImage.width * 6 + 1500, y: 380, image: platformImage }),
       new Platform({ x: platformImage.width * 7 + 1900, y: 470, image: platformImage }),
-
       new Platform({
         x: platformImage.width * 8 + 2150,
         y: 300,
         image: platformSmallTallImage
       }),
-
       new Platform({ x: platformImage.width * 9 + 2550, y: 470, image: platformImage }),
       new Platform({ x: platformImage.width * 10 + 2900, y: 410, image: platformImage }),
       new Platform({ x: platformImage.width * 11 + 3300, y: 470, image: platformImage }),
-
       new Platform({ x: platformImage.width * 12 + 3650, y: 350, image: platformImage }),
       new Platform({ x: platformImage.width * 13 + 4100, y: 470, image: platformImage })
     ]
@@ -348,35 +342,28 @@ function createMissionPlatforms() {
 
   return [
     new Platform({ x: -1, y: 470, image: platformImage }),
-
     new Platform({ x: platformImage.width + 250, y: 420, image: platformImage }),
     new Platform({ x: platformImage.width * 2 + 650, y: 340, image: platformImage }),
-
     new Platform({
       x: platformImage.width * 3 + 1100,
       y: 260,
       image: platformSmallTallImage
     }),
-
     new Platform({ x: platformImage.width * 4 + 1500, y: 470, image: platformImage }),
     new Platform({ x: platformImage.width * 5 + 1950, y: 390, image: platformImage }),
-
     new Platform({
       x: platformImage.width * 6 + 2350,
       y: 280,
       image: platformSmallTallImage
     }),
-
     new Platform({ x: platformImage.width * 7 + 2800, y: 470, image: platformImage }),
     new Platform({ x: platformImage.width * 8 + 3250, y: 355, image: platformImage }),
     new Platform({ x: platformImage.width * 9 + 3700, y: 470, image: platformImage }),
-
     new Platform({
       x: platformImage.width * 10 + 4100,
       y: 270,
       image: platformSmallTallImage
     }),
-
     new Platform({ x: platformImage.width * 11 + 4550, y: 420, image: platformImage }),
     new Platform({ x: platformImage.width * 12 + 5000, y: 470, image: platformImage })
   ]
