@@ -15,37 +15,64 @@ canvas.width = 1024
 canvas.height = 576
 
 const gravity = 0.5
+const totalMissions = 13
 
 let gameState = 'start'
 let selectedMission = 1
+let selectedDifficulty = 'easy'
+let unlockedMissionCount = Number(localStorage.getItem('unlockedMissionCount')) || 1
+
+if (unlockedMissionCount < 1) unlockedMissionCount = 1
+if (unlockedMissionCount > totalMissions) unlockedMissionCount = totalMissions
+
+const colors = {
+  blue: '#1d4ed8',
+  blueDark: '#0f2f78',
+  locked: '#334155',
+  white: '#ffffff',
+  overlay: 'rgba(3, 7, 18, 0.58)'
+}
 
 const buttons = {
-  start: { x: 412, y: 250, width: 200, height: 56, text: 'START' },
-  help: { x: 412, y: 325, width: 200, height: 56, text: 'HELP' },
-  mission1: { x: 337, y: 205, width: 350, height: 60, text: 'MISSION 1 - EASY' },
-  mission2: { x: 337, y: 285, width: 350, height: 60, text: 'MISSION 2 - NORMAL' },
-  mission3: { x: 337, y: 365, width: 350, height: 60, text: 'MISSION 3 - HARD' },
+  start: { x: 412, y: 250, width: 200, height: 58, text: 'START' },
+  help: { x: 412, y: 325, width: 200, height: 58, text: 'HELP' },
   back: { x: 32, y: 32, width: 130, height: 48, text: 'BACK' },
+  easy: { x: 337, y: 215, width: 350, height: 58, text: 'EASY' },
+  normal: { x: 337, y: 295, width: 350, height: 58, text: 'NORMAL' },
+  hard: { x: 337, y: 375, width: 350, height: 58, text: 'HARD' },
   restart: { x: 312, y: 345, width: 190, height: 54, text: 'RESTART' },
   menu: { x: 522, y: 345, width: 190, height: 54, text: 'MENU' }
 }
 
-const missions = {
-  1: {
-    title: 'MISSION 1',
-    difficulty: 'EASY',
+const missionButtons = []
+
+for (let i = 1; i <= totalMissions; i++) {
+  const column = (i - 1) % 4
+  const row = Math.floor((i - 1) / 4)
+
+  missionButtons.push({
+    missionNumber: i,
+    x: 128 + column * 195,
+    y: 180 + row * 78,
+    width: 165,
+    height: 56,
+    text: `MISSION ${i}`
+  })
+}
+
+const difficulties = {
+  easy: {
+    label: 'EASY',
     goal: 'Go from Point A to Point B',
     winOffset: 7600
   },
-  2: {
-    title: 'MISSION 2',
-    difficulty: 'NORMAL',
+  normal: {
+    label: 'NORMAL',
     goal: 'Longer jumps and more holes',
     winOffset: 8600
   },
-  3: {
-    title: 'MISSION 3',
-    difficulty: 'HARD',
+  hard: {
+    label: 'HARD',
     goal: 'Hard jumps and bigger gaps',
     winOffset: 9600
   }
@@ -152,23 +179,47 @@ function createImage(imageSrc) {
   return image
 }
 
+function drawRoundedRect(x, y, width, height, radius) {
+  c.beginPath()
+  c.moveTo(x + radius, y)
+  c.lineTo(x + width - radius, y)
+  c.quadraticCurveTo(x + width, y, x + width, y + radius)
+  c.lineTo(x + width, y + height - radius)
+  c.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
+  c.lineTo(x + radius, y + height)
+  c.quadraticCurveTo(x, y + height, x, y + height - radius)
+  c.lineTo(x, y + radius)
+  c.quadraticCurveTo(x, y, x + radius, y)
+  c.closePath()
+}
+
 function drawButton(button) {
-  c.fillStyle = '#111827'
-  c.fillRect(button.x, button.y, button.width, button.height)
+  const locked = button.locked
 
-  c.strokeStyle = 'white'
+  c.fillStyle = locked ? colors.locked : colors.blue
+  drawRoundedRect(button.x, button.y, button.width, button.height, 14)
+  c.fill()
+
+  c.strokeStyle = locked ? '#64748b' : colors.white
   c.lineWidth = 3
-  c.strokeRect(button.x, button.y, button.width, button.height)
+  drawRoundedRect(button.x, button.y, button.width, button.height, 14)
+  c.stroke()
 
-  c.fillStyle = 'white'
-  c.font = 'bold 24px Arial'
+  c.fillStyle = colors.white
+  c.font = 'bold 20px Arial'
   c.textAlign = 'center'
   c.textBaseline = 'middle'
   c.fillText(
     button.text,
     button.x + button.width / 2,
-    button.y + button.height / 2
+    button.y + button.height / 2 - (locked ? 8 : 0)
   )
+
+  if (locked) {
+    c.font = '14px Arial'
+    c.fillStyle = '#cbd5e1'
+    c.fillText('LOCKED', button.x + button.width / 2, button.y + button.height / 2 + 15)
+  }
 
   c.textAlign = 'left'
   c.textBaseline = 'alphabetic'
@@ -183,85 +234,142 @@ function isInsideButton(mouse, button) {
   )
 }
 
+function unlockNextMission() {
+  if (selectedMission === unlockedMissionCount && unlockedMissionCount < totalMissions) {
+    unlockedMissionCount++
+    localStorage.setItem('unlockedMissionCount', unlockedMissionCount)
+  }
+}
+
+function drawBackgroundOnly() {
+  c.fillStyle = 'white'
+  c.fillRect(0, 0, canvas.width, canvas.height)
+
+  const bg = createImage(background)
+  const hill = createImage(hills)
+
+  c.drawImage(bg, -1, -1)
+  c.drawImage(hill, -1, -1)
+}
+
+function drawTitle(text, y) {
+  c.fillStyle = colors.white
+  c.font = 'bold 52px Arial'
+  c.textAlign = 'center'
+  c.fillText(text, canvas.width / 2, y)
+  c.textAlign = 'left'
+}
+
 function drawStartScreen() {
   drawBackgroundOnly()
 
-  c.fillStyle = 'rgba(0, 0, 0, 0.45)'
+  c.fillStyle = colors.overlay
   c.fillRect(0, 0, canvas.width, canvas.height)
 
-  c.fillStyle = 'white'
-  c.font = 'bold 58px Arial'
-  c.textAlign = 'center'
-  c.fillText('MARIO MISSION', canvas.width / 2, 165)
+  drawTitle('MARIO MISSION', 165)
 
+  c.fillStyle = colors.white
   c.font = '24px Arial'
+  c.textAlign = 'center'
   c.fillText('Point A to Point B', canvas.width / 2, 205)
+  c.textAlign = 'left'
 
   drawButton(buttons.start)
   drawButton(buttons.help)
-
-  c.textAlign = 'left'
 }
 
 function drawHelpScreen() {
   drawBackgroundOnly()
 
-  c.fillStyle = 'rgba(0, 0, 0, 0.55)'
+  c.fillStyle = colors.overlay
   c.fillRect(0, 0, canvas.width, canvas.height)
 
   drawButton(buttons.back)
+  drawTitle('HELP', 145)
 
-  c.fillStyle = 'white'
-  c.font = 'bold 48px Arial'
-  c.textAlign = 'center'
-  c.fillText('HELP', canvas.width / 2, 145)
-
+  c.fillStyle = colors.white
   c.font = '28px Arial'
+  c.textAlign = 'center'
   c.fillText('A - Move Left', canvas.width / 2, 235)
   c.fillText('D - Move Right', canvas.width / 2, 280)
   c.fillText('W - Jump', canvas.width / 2, 325)
   c.fillText('Reach the end of the level to win.', canvas.width / 2, 390)
-
   c.textAlign = 'left'
 }
 
 function drawMissionScreen() {
   drawBackgroundOnly()
 
-  c.fillStyle = 'rgba(0, 0, 0, 0.5)'
+  c.fillStyle = colors.overlay
   c.fillRect(0, 0, canvas.width, canvas.height)
 
   drawButton(buttons.back)
+  drawTitle('SELECT MISSION', 125)
 
-  c.fillStyle = 'white'
-  c.font = 'bold 48px Arial'
+  missionButtons.forEach(button => {
+    drawButton({
+      ...button,
+      locked: button.missionNumber > unlockedMissionCount
+    })
+  })
+
+  c.fillStyle = colors.white
+  c.font = '18px Arial'
   c.textAlign = 'center'
-  c.fillText('SELECT MISSION', canvas.width / 2, 150)
-
-  drawButton(buttons.mission1)
-  drawButton(buttons.mission2)
-  drawButton(buttons.mission3)
-
+  c.fillText(
+    `${unlockedMissionCount} / ${totalMissions} missions unlocked`,
+    canvas.width / 2,
+    520
+  )
   c.textAlign = 'left'
 }
 
-function drawWinScreen() {
-  const mission = missions[selectedMission]
+function drawDifficultyScreen() {
+  drawBackgroundOnly()
 
-  c.fillStyle = 'rgba(0, 0, 0, 0.55)'
+  c.fillStyle = colors.overlay
   c.fillRect(0, 0, canvas.width, canvas.height)
 
-  c.fillStyle = 'white'
+  drawButton(buttons.back)
+  drawTitle('SELECT DIFFICULTY', 150)
+
+  c.fillStyle = colors.white
+  c.font = '22px Arial'
+  c.textAlign = 'center'
+  c.fillText(`Mission ${selectedMission}`, canvas.width / 2, 185)
+  c.textAlign = 'left'
+
+  drawButton(buttons.easy)
+  drawButton(buttons.normal)
+  drawButton(buttons.hard)
+}
+
+function drawWinScreen() {
+  const difficulty = difficulties[selectedDifficulty]
+
+  c.fillStyle = 'rgba(0, 0, 0, 0.58)'
+  c.fillRect(0, 0, canvas.width, canvas.height)
+
+  c.fillStyle = colors.white
   c.font = 'bold 72px Arial'
   c.textAlign = 'center'
   c.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2 - 45)
 
   c.font = '28px Arial'
   c.fillText(
-    `${mission.title} ${mission.difficulty} Complete`,
+    `MISSION ${selectedMission} ${difficulty.label} COMPLETE`,
     canvas.width / 2,
     canvas.height / 2 + 20
   )
+
+  if (selectedMission < totalMissions) {
+    c.font = '22px Arial'
+    c.fillText(
+      `MISSION ${selectedMission + 1} UNLOCKED`,
+      canvas.width / 2,
+      canvas.height / 2 + 58
+    )
+  }
 
   drawButton(buttons.restart)
   drawButton(buttons.menu)
@@ -284,7 +392,7 @@ const keys = {
 }
 
 function createMissionPlatforms() {
-  if (selectedMission === 1) {
+  if (selectedDifficulty === 'easy') {
     return [
       new Platform({ x: -1, y: 470, image: platformImage }),
       new Platform({ x: platformImage.width - 3, y: 470, image: platformImage }),
@@ -313,7 +421,7 @@ function createMissionPlatforms() {
     ]
   }
 
-  if (selectedMission === 2) {
+  if (selectedDifficulty === 'normal') {
     return [
       new Platform({ x: -1, y: 470, image: platformImage }),
       new Platform({ x: platformImage.width - 3, y: 470, image: platformImage }),
@@ -396,29 +504,24 @@ function init() {
   ]
 }
 
-function drawBackgroundOnly() {
-  c.fillStyle = 'white'
-  c.fillRect(0, 0, canvas.width, canvas.height)
-
-  const bg = createImage(background)
-  const hill = createImage(hills)
-
-  c.drawImage(bg, -1, -1)
-  c.drawImage(hill, -1, -1)
-}
-
 function drawGameHud() {
-  const mission = missions[selectedMission]
+  const difficulty = difficulties[selectedDifficulty]
 
-  c.fillStyle = 'rgba(0, 0, 0, 0.45)'
-  c.fillRect(20, 20, 280, 82)
+  c.fillStyle = 'rgba(15, 47, 120, 0.82)'
+  drawRoundedRect(20, 20, 315, 86, 14)
+  c.fill()
 
-  c.fillStyle = 'white'
+  c.strokeStyle = colors.white
+  c.lineWidth = 2
+  drawRoundedRect(20, 20, 315, 86, 14)
+  c.stroke()
+
+  c.fillStyle = colors.white
   c.font = 'bold 20px Arial'
-  c.fillText(`${mission.title} - ${mission.difficulty}`, 38, 50)
+  c.fillText(`MISSION ${selectedMission} - ${difficulty.label}`, 38, 52)
 
   c.font = '16px Arial'
-  c.fillText(mission.goal, 38, 77)
+  c.fillText(difficulty.goal, 38, 80)
 }
 
 function playMission() {
@@ -515,7 +618,8 @@ function playMission() {
     player.width = player.sprites.stand.width
   }
 
-  if (scrollOffset > missions[selectedMission].winOffset) {
+  if (scrollOffset > difficulties[selectedDifficulty].winOffset) {
+    unlockNextMission()
     gameState = 'won'
   }
 
@@ -542,6 +646,11 @@ function animate() {
 
   if (gameState === 'missions') {
     drawMissionScreen()
+    return
+  }
+
+  if (gameState === 'difficulty') {
+    drawDifficultyScreen()
     return
   }
 
@@ -588,16 +697,29 @@ addEventListener('click', event => {
   } else if (gameState === 'missions') {
     if (isInsideButton(mouse, buttons.back)) {
       gameState = 'start'
-    } else if (isInsideButton(mouse, buttons.mission1)) {
-      selectedMission = 1
+    }
+
+    missionButtons.forEach(button => {
+      const locked = button.missionNumber > unlockedMissionCount
+
+      if (!locked && isInsideButton(mouse, button)) {
+        selectedMission = button.missionNumber
+        gameState = 'difficulty'
+      }
+    })
+  } else if (gameState === 'difficulty') {
+    if (isInsideButton(mouse, buttons.back)) {
+      gameState = 'missions'
+    } else if (isInsideButton(mouse, buttons.easy)) {
+      selectedDifficulty = 'easy'
       init()
       gameState = 'playing'
-    } else if (isInsideButton(mouse, buttons.mission2)) {
-      selectedMission = 2
+    } else if (isInsideButton(mouse, buttons.normal)) {
+      selectedDifficulty = 'normal'
       init()
       gameState = 'playing'
-    } else if (isInsideButton(mouse, buttons.mission3)) {
-      selectedMission = 3
+    } else if (isInsideButton(mouse, buttons.hard)) {
+      selectedDifficulty = 'hard'
       init()
       gameState = 'playing'
     }
@@ -646,6 +768,8 @@ addEventListener('keydown', ({ keyCode, repeat }) => {
     case 27:
       if (gameState === 'help' || gameState === 'missions') {
         gameState = 'start'
+      } else if (gameState === 'difficulty') {
+        gameState = 'missions'
       }
       break
   }
