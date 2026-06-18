@@ -238,6 +238,9 @@ canvas.width = 1024;
 canvas.height = 576;
 var gravity = 0.5;
 var totalMissions = 13;
+var targetFPS = 60;
+var frameDelay = 1000 / targetFPS;
+var lastFrameTime = 0;
 var gameState = 'start';
 var selectedMission = 1;
 var selectedDifficulty = 'easy';
@@ -309,6 +312,26 @@ var buttons = {
     text: 'MENU'
   }
 };
+var difficulties = {
+  easy: {
+    label: 'EASY',
+    speedBonus: 0,
+    gapBonus: 0,
+    enemyBonus: 0
+  },
+  normal: {
+    label: 'NORMAL',
+    speedBonus: 1,
+    gapBonus: 70,
+    enemyBonus: 1
+  },
+  hard: {
+    label: 'HARD',
+    speedBonus: 2,
+    gapBonus: 130,
+    enemyBonus: 2
+  }
+};
 var missionButtons = [];
 for (var i = 1; i <= totalMissions; i++) {
   var column = (i - 1) % 4;
@@ -322,28 +345,16 @@ for (var i = 1; i <= totalMissions; i++) {
     text: "MISSION ".concat(i)
   });
 }
-var difficulties = {
-  easy: {
-    label: 'EASY',
-    goal: 'Go from Point A to Point B',
-    winOffset: 7600
-  },
-  normal: {
-    label: 'NORMAL',
-    goal: 'Longer jumps and more holes',
-    winOffset: 8600
-  },
-  hard: {
-    label: 'HARD',
-    goal: 'Hard jumps and bigger gaps',
-    winOffset: 9600
-  }
-};
+var missionNames = ['First Steps', 'Broken Road', 'Hill Runner', 'Sky Training', 'Long Jump', 'Enemy Patrol', 'Tall Towers', 'Fast Fighters', 'Danger Valley', 'Hard Climb', 'Last Bridge', 'Weapon Path', 'Final War'];
 var Player = /*#__PURE__*/function () {
   function Player() {
     _classCallCheck(this, Player);
-    this.speed = 10;
+    this.speed = 8;
     this.position = {
+      x: 100,
+      y: 100
+    };
+    this.previousPosition = {
       x: 100,
       y: 100
     };
@@ -354,6 +365,13 @@ var Player = /*#__PURE__*/function () {
     this.width = 66;
     this.height = 150;
     this.frames = 0;
+    this.canJump = false;
+    this.lives = 3;
+    this.hasWeapon = false;
+    this.ammo = 30;
+    this.maxAmmo = 30;
+    this.reloadTimer = 0;
+    this.shootTimer = 0;
     this.sprites = {
       stand: {
         right: createImage(_img_spriteStandRight_png__WEBPACK_IMPORTED_MODULE_7__["default"]),
@@ -375,22 +393,30 @@ var Player = /*#__PURE__*/function () {
     key: "draw",
     value: function draw() {
       c.drawImage(this.currentSprite, this.currentCropWidth * this.frames, 0, this.currentCropWidth, 400, this.position.x, this.position.y, this.width, this.height);
+      if (this.hasWeapon) drawPlayerWeapon();
     }
   }, {
     key: "update",
     value: function update() {
+      this.previousPosition.x = this.position.x;
+      this.previousPosition.y = this.position.y;
       this.frames++;
-      if (this.frames > 28 && (this.currentSprite === this.sprites.stand.right || this.currentSprite === this.sprites.stand.left)) {
-        this.frames = 0;
-      } else if (this.frames > 28 && (this.currentSprite === this.sprites.run.right || this.currentSprite === this.sprites.run.left)) {
-        this.frames = 0;
-      }
+      if (this.frames > 28) this.frames = 0;
       this.draw();
       this.position.x += this.velocity.x;
       this.position.y += this.velocity.y;
       if (this.position.y + this.height + this.velocity.y <= canvas.height) {
         this.velocity.y += gravity;
+        this.canJump = false;
+      } else {
+        this.velocity.y = 0;
+        this.canJump = true;
       }
+      if (this.reloadTimer > 0) {
+        this.reloadTimer--;
+        if (this.reloadTimer === 0) this.ammo = this.maxAmmo;
+      }
+      if (this.shootTimer > 0) this.shootTimer--;
     }
   }]);
   return Player;
@@ -439,6 +465,207 @@ var GenericObject = /*#__PURE__*/function () {
   }]);
   return GenericObject;
 }();
+var Enemy = /*#__PURE__*/function () {
+  function Enemy(_ref3) {
+    var x = _ref3.x,
+      y = _ref3.y,
+      startX = _ref3.startX,
+      endX = _ref3.endX,
+      speed = _ref3.speed;
+    _classCallCheck(this, Enemy);
+    this.position = {
+      x: x,
+      y: y
+    };
+    this.width = 52;
+    this.height = 52;
+    this.startX = startX;
+    this.endX = endX;
+    this.speed = speed;
+    this.velocity = {
+      x: speed
+    };
+    this.alive = true;
+  }
+  _createClass(Enemy, [{
+    key: "draw",
+    value: function draw() {
+      if (!this.alive) return;
+      c.fillStyle = '#7f1d1d';
+      drawRoundedRect(this.position.x, this.position.y, this.width, this.height, 10);
+      c.fill();
+      c.fillStyle = '#ffffff';
+      c.beginPath();
+      c.arc(this.position.x + 16, this.position.y + 18, 5, 0, Math.PI * 2);
+      c.arc(this.position.x + 36, this.position.y + 18, 5, 0, Math.PI * 2);
+      c.fill();
+    }
+  }, {
+    key: "update",
+    value: function update() {
+      if (!this.alive) return;
+      this.position.x += this.velocity.x;
+      if (this.position.x <= this.startX || this.position.x + this.width >= this.endX) {
+        this.velocity.x *= -1;
+      }
+      this.draw();
+    }
+  }]);
+  return Enemy;
+}();
+var WeaponPickup = /*#__PURE__*/function () {
+  function WeaponPickup(_ref4) {
+    var x = _ref4.x,
+      y = _ref4.y;
+    _classCallCheck(this, WeaponPickup);
+    this.position = {
+      x: x,
+      y: y
+    };
+    this.width = 90;
+    this.height = 45;
+    this.collected = false;
+  }
+  _createClass(WeaponPickup, [{
+    key: "draw",
+    value: function draw() {
+      if (this.collected) return;
+      c.fillStyle = '#facc15';
+      c.font = 'bold 18px Arial';
+      c.fillText('M4', this.position.x + 20, this.position.y - 12);
+      c.fillStyle = '#111827';
+      drawRoundedRect(this.position.x, this.position.y + 10, 68, 12, 3);
+      c.fill();
+      c.fillStyle = '#374151';
+      c.fillRect(this.position.x + 20, this.position.y + 22, 14, 20);
+      c.fillRect(this.position.x + 52, this.position.y + 7, 32, 6);
+      c.fillStyle = '#e5e7eb';
+      c.fillRect(this.position.x + 6, this.position.y + 13, 12, 6);
+    }
+  }]);
+  return WeaponPickup;
+}();
+var Bullet = /*#__PURE__*/function () {
+  function Bullet(_ref5) {
+    var x = _ref5.x,
+      y = _ref5.y,
+      speed = _ref5.speed,
+      _ref5$fromBoss = _ref5.fromBoss,
+      fromBoss = _ref5$fromBoss === void 0 ? false : _ref5$fromBoss;
+    _classCallCheck(this, Bullet);
+    this.position = {
+      x: x,
+      y: y
+    };
+    this.width = fromBoss ? 22 : 14;
+    this.height = fromBoss ? 22 : 6;
+    this.speed = speed;
+    this.fromBoss = fromBoss;
+    this.active = true;
+  }
+  _createClass(Bullet, [{
+    key: "update",
+    value: function update() {
+      this.position.x += this.speed;
+      if (this.position.x < -100 || this.position.x > canvas.width + 100) {
+        this.active = false;
+      }
+      c.fillStyle = this.fromBoss ? '#ef4444' : '#facc15';
+      if (this.fromBoss) {
+        c.beginPath();
+        c.arc(this.position.x, this.position.y, this.width / 2, 0, Math.PI * 2);
+        c.fill();
+      } else {
+        c.fillRect(this.position.x, this.position.y, this.width, this.height);
+      }
+    }
+  }]);
+  return Bullet;
+}();
+var Boss = /*#__PURE__*/function () {
+  function Boss(_ref6) {
+    var x = _ref6.x,
+      y = _ref6.y;
+    _classCallCheck(this, Boss);
+    this.name = 'Commander Rexon';
+    this.position = {
+      x: x,
+      y: y
+    };
+    this.width = 135;
+    this.height = 165;
+    this.maxHealth = 150;
+    this.health = this.maxHealth;
+    this.shootTimer = 90;
+    this.alive = true;
+  }
+  _createClass(Boss, [{
+    key: "draw",
+    value: function draw() {
+      if (!this.alive) return;
+      c.fillStyle = '#312e81';
+      drawRoundedRect(this.position.x, this.position.y, this.width, this.height, 18);
+      c.fill();
+      c.fillStyle = '#f8fafc';
+      c.fillRect(this.position.x + 30, this.position.y + 35, 18, 18);
+      c.fillRect(this.position.x + 87, this.position.y + 35, 18, 18);
+      c.fillStyle = '#dc2626';
+      c.fillRect(this.position.x + 35, this.position.y + 95, 65, 12);
+      drawBossHealth();
+    }
+  }, {
+    key: "update",
+    value: function update() {
+      if (!this.alive) return;
+      this.shootTimer--;
+      if (this.shootTimer <= 0) {
+        bossBullets.push(new Bullet({
+          x: this.position.x,
+          y: this.position.y + 78,
+          speed: -8,
+          fromBoss: true
+        }));
+        this.shootTimer = 80;
+      }
+      this.draw();
+    }
+  }]);
+  return Boss;
+}();
+var Door = /*#__PURE__*/function () {
+  function Door(_ref7) {
+    var x = _ref7.x,
+      y = _ref7.y;
+    _classCallCheck(this, Door);
+    this.position = {
+      x: x,
+      y: y
+    };
+    this.width = 78;
+    this.height = 118;
+    this.open = false;
+  }
+  _createClass(Door, [{
+    key: "draw",
+    value: function draw() {
+      c.fillStyle = this.open ? '#22c55e' : '#475569';
+      drawRoundedRect(this.position.x, this.position.y, this.width, this.height, 10);
+      c.fill();
+      c.strokeStyle = '#f8fafc';
+      c.lineWidth = 4;
+      drawRoundedRect(this.position.x, this.position.y, this.width, this.height, 10);
+      c.stroke();
+      c.fillStyle = '#facc15';
+      c.beginPath();
+      c.arc(this.position.x + 58, this.position.y + 62, 5, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#ffffff';
+      c.font = 'bold 14px Arial';
+      c.fillText(this.open ? 'ENTER' : 'LOCKED', this.position.x + 9, this.position.y - 10);
+    }
+  }]);
+  return Door;
+}();
 function createImage(imageSrc) {
   var image = new Image();
   image.src = imageSrc;
@@ -481,6 +708,9 @@ function drawButton(button) {
 }
 function isInsideButton(mouse, button) {
   return mouse.x >= button.x && mouse.x <= button.x + button.width && mouse.y >= button.y && mouse.y <= button.y + button.height;
+}
+function rectanglesTouch(a, b) {
+  return a.position.x < b.position.x + b.width && a.position.x + a.width > b.position.x && a.position.y < b.position.y + b.height && a.position.y + a.height > b.position.y;
 }
 function unlockNextMission() {
   if (selectedMission === unlockedMissionCount && unlockedMissionCount < totalMissions) {
@@ -527,8 +757,8 @@ function drawHelpScreen() {
   c.textAlign = 'center';
   c.fillText('A - Move Left', canvas.width / 2, 235);
   c.fillText('D - Move Right', canvas.width / 2, 280);
-  c.fillText('W - Jump', canvas.width / 2, 325);
-  c.fillText('Reach the end of the level to win.', canvas.width / 2, 390);
+  c.fillText('W / SPACE - Jump', canvas.width / 2, 325);
+  c.fillText('Stomp enemies. Mission 13 has the final boss.', canvas.width / 2, 390);
   c.textAlign = 'left';
 }
 function drawMissionScreen() {
@@ -539,6 +769,7 @@ function drawMissionScreen() {
   drawTitle('SELECT MISSION', 125);
   missionButtons.forEach(function (button) {
     drawButton(_objectSpread({}, button, {
+      text: "".concat(button.missionNumber, ". ").concat(missionNames[button.missionNumber - 1]),
       locked: button.missionNumber > unlockedMissionCount
     }));
   });
@@ -557,25 +788,24 @@ function drawDifficultyScreen() {
   c.fillStyle = colors.white;
   c.font = '22px Arial';
   c.textAlign = 'center';
-  c.fillText("Mission ".concat(selectedMission), canvas.width / 2, 185);
+  c.fillText("Mission ".concat(selectedMission, ": ").concat(missionNames[selectedMission - 1]), canvas.width / 2, 185);
   c.textAlign = 'left';
   drawButton(buttons.easy);
   drawButton(buttons.normal);
   drawButton(buttons.hard);
 }
 function drawWinScreen() {
-  var difficulty = difficulties[selectedDifficulty];
   c.fillStyle = 'rgba(0, 0, 0, 0.58)';
   c.fillRect(0, 0, canvas.width, canvas.height);
   c.fillStyle = colors.white;
-  c.font = 'bold 72px Arial';
+  c.font = 'bold 60px Arial';
   c.textAlign = 'center';
-  c.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2 - 45);
-  c.font = '28px Arial';
-  c.fillText("MISSION ".concat(selectedMission, " ").concat(difficulty.label, " COMPLETE"), canvas.width / 2, canvas.height / 2 + 20);
+  c.fillText(selectedMission === 13 ? 'YOU WINNN!' : 'YOU WIN!', canvas.width / 2, canvas.height / 2 - 60);
+  c.font = 'bold 34px Arial';
+  c.fillText(selectedMission === 13 ? 'CONGRATSS!' : "MISSION ".concat(selectedMission, " COMPLETE"), canvas.width / 2, canvas.height / 2);
   if (selectedMission < totalMissions) {
     c.font = '22px Arial';
-    c.fillText("MISSION ".concat(selectedMission + 1, " UNLOCKED"), canvas.width / 2, canvas.height / 2 + 58);
+    c.fillText("MISSION ".concat(selectedMission + 1, " UNLOCKED"), canvas.width / 2, canvas.height / 2 + 50);
   }
   drawButton(buttons.restart);
   drawButton(buttons.menu);
@@ -585,9 +815,16 @@ var platformImage = createImage(_img_platform_png__WEBPACK_IMPORTED_MODULE_0__["
 var platformSmallTallImage = createImage(_img_platformSmallTall_png__WEBPACK_IMPORTED_MODULE_3__["default"]);
 var player;
 var platforms = [];
+var enemies = [];
 var genericObjects = [];
+var bullets = [];
+var bossBullets = [];
+var weaponPickup = null;
+var boss = null;
+var exitDoor = null;
 var currentKey;
 var scrollOffset = 0;
+var missionWinOffset = 7600;
 var keys = {
   right: {
     pressed: false
@@ -597,185 +834,68 @@ var keys = {
   }
 };
 function createMissionPlatforms() {
-  if (selectedDifficulty === 'easy') {
-    return [new Platform({
-      x: -1,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width - 3,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 2 + 180,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 3 + 180,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 4 + 550,
-      y: 390,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 5 + 550,
-      y: 390,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 6 + 950,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 7 + 950,
-      y: 270,
-      image: platformSmallTallImage
-    }), new Platform({
-      x: platformImage.width * 8 + 1250,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 9 + 1250,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 10 + 1650,
-      y: 350,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 11 + 2050,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 12 + 2050,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 13 + 2350,
-      y: 300,
-      image: platformSmallTallImage
-    }), new Platform({
-      x: platformImage.width * 14 + 2650,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 15 + 2650,
-      y: 470,
-      image: platformImage
-    })];
+  var diff = difficulties[selectedDifficulty];
+  var mission = selectedMission;
+  var length = mission === 13 ? 24 : 8 + mission;
+  var platformsList = [];
+  var x = -1;
+  for (var _i = 0; _i < length; _i++) {
+    var isTall = _i > 2 && (_i + mission) % 5 === 0;
+    var baseGap = mission === 13 ? 135 + diff.gapBonus * 0.45 : 120 + mission * 18 + diff.gapBonus;
+    var gap = _i < 2 ? -3 : baseGap + _i % 3 * 45;
+    var yPattern = [470, 430, 390, 350, 470, 410, 320];
+    var y = _i < 2 ? 470 : yPattern[(_i + mission) % yPattern.length];
+    platformsList.push(new Platform({
+      x: x,
+      y: isTall ? y - 70 : y,
+      image: isTall ? platformSmallTallImage : platformImage
+    }));
+    x += platformImage.width + gap;
   }
-  if (selectedDifficulty === 'normal') {
-    return [new Platform({
-      x: -1,
+  if (mission === 13) {
+    platformsList.push(new Platform({
+      x: x + 250,
       y: 470,
       image: platformImage
-    }), new Platform({
-      x: platformImage.width - 3,
+    }));
+    platformsList.push(new Platform({
+      x: x + 720,
+      y: 430,
+      image: platformImage
+    }));
+    platformsList.push(new Platform({
+      x: x + 1190,
       y: 470,
       image: platformImage
-    }), new Platform({
-      x: platformImage.width * 2 + 300,
+    }));
+    platformsList.push(new Platform({
+      x: x + 1660,
       y: 470,
       image: platformImage
-    }), new Platform({
-      x: platformImage.width * 3 + 480,
-      y: 405,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 4 + 850,
-      y: 290,
-      image: platformSmallTallImage
-    }), new Platform({
-      x: platformImage.width * 5 + 1200,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 6 + 1500,
-      y: 380,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 7 + 1900,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 8 + 2150,
-      y: 300,
-      image: platformSmallTallImage
-    }), new Platform({
-      x: platformImage.width * 9 + 2550,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 10 + 2900,
-      y: 410,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 11 + 3300,
-      y: 470,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 12 + 3650,
-      y: 350,
-      image: platformImage
-    }), new Platform({
-      x: platformImage.width * 13 + 4100,
-      y: 470,
-      image: platformImage
-    })];
+    }));
   }
-  return [new Platform({
-    x: -1,
-    y: 470,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width + 250,
-    y: 420,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width * 2 + 650,
-    y: 340,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width * 3 + 1100,
-    y: 260,
-    image: platformSmallTallImage
-  }), new Platform({
-    x: platformImage.width * 4 + 1500,
-    y: 470,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width * 5 + 1950,
-    y: 390,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width * 6 + 2350,
-    y: 280,
-    image: platformSmallTallImage
-  }), new Platform({
-    x: platformImage.width * 7 + 2800,
-    y: 470,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width * 8 + 3250,
-    y: 355,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width * 9 + 3700,
-    y: 470,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width * 10 + 4100,
-    y: 270,
-    image: platformSmallTallImage
-  }), new Platform({
-    x: platformImage.width * 11 + 4550,
-    y: 420,
-    image: platformImage
-  }), new Platform({
-    x: platformImage.width * 12 + 5000,
-    y: 470,
-    image: platformImage
-  })];
+  missionWinOffset = mission === 13 ? x + 1700 : 4300 + mission * 700 + diff.gapBonus * 4;
+  return platformsList;
+}
+function createEnemies() {
+  var diff = difficulties[selectedDifficulty];
+  var mission = selectedMission;
+  var enemiesList = [];
+  var enemyCount = Math.min(2 + Math.floor(mission / 2) + diff.enemyBonus, mission === 13 ? 12 : 9);
+  for (var _i2 = 0; _i2 < enemyCount; _i2++) {
+    var platformIndex = 2 + _i2 * 2;
+    if (!platforms[platformIndex]) continue;
+    var platformItem = platforms[platformIndex];
+    var enemyX = platformItem.position.x + 120;
+    enemiesList.push(new Enemy({
+      x: enemyX,
+      y: platformItem.position.y - 52,
+      startX: platformItem.position.x + 20,
+      endX: platformItem.position.x + platformItem.width - 20,
+      speed: 1.4 + mission * 0.12 + diff.speedBonus * 0.35
+    }));
+  }
+  return enemiesList;
 }
 function init() {
   platformImage = createImage(_img_platform_png__WEBPACK_IMPORTED_MODULE_0__["default"]);
@@ -786,6 +906,24 @@ function init() {
   keys.left.pressed = false;
   currentKey = null;
   platforms = createMissionPlatforms();
+  enemies = createEnemies();
+  bullets = [];
+  bossBullets = [];
+  var weaponPlatform = selectedMission === 13 ? platforms[platforms.length - 4] : null;
+  var bossPlatform = selectedMission === 13 ? platforms[platforms.length - 2] : null;
+  var doorPlatform = selectedMission === 13 ? platforms[platforms.length - 1] : null;
+  weaponPickup = selectedMission === 13 && weaponPlatform ? new WeaponPickup({
+    x: weaponPlatform.position.x + 180,
+    y: weaponPlatform.position.y - 58
+  }) : null;
+  boss = selectedMission === 13 && bossPlatform ? new Boss({
+    x: bossPlatform.position.x + 215,
+    y: bossPlatform.position.y - 165
+  }) : null;
+  exitDoor = selectedMission === 13 && doorPlatform ? new Door({
+    x: doorPlatform.position.x + 270,
+    y: doorPlatform.position.y - 118
+  }) : null;
   genericObjects = [new GenericObject({
     x: -1,
     y: -1,
@@ -799,27 +937,81 @@ function init() {
 function drawGameHud() {
   var difficulty = difficulties[selectedDifficulty];
   c.fillStyle = 'rgba(15, 47, 120, 0.82)';
-  drawRoundedRect(20, 20, 315, 86, 14);
+  drawRoundedRect(20, 20, 355, 100, 14);
   c.fill();
   c.strokeStyle = colors.white;
   c.lineWidth = 2;
-  drawRoundedRect(20, 20, 315, 86, 14);
+  drawRoundedRect(20, 20, 355, 100, 14);
   c.stroke();
   c.fillStyle = colors.white;
-  c.font = 'bold 20px Arial';
-  c.fillText("MISSION ".concat(selectedMission, " - ").concat(difficulty.label), 38, 52);
-  c.font = '16px Arial';
-  c.fillText(difficulty.goal, 38, 80);
+  c.font = 'bold 18px Arial';
+  c.fillText("MISSION ".concat(selectedMission, " - ").concat(missionNames[selectedMission - 1]), 38, 50);
+  c.font = '15px Arial';
+  c.fillText("Difficulty: ".concat(difficulty.label), 38, 76);
+  c.fillText("Lives: ".concat(player.lives), 38, 100);
+  if (player.hasWeapon) {
+    c.fillText(player.reloadTimer > 0 ? 'Reloading...' : "M4 Ammo: ".concat(player.ammo, " / ").concat(player.maxAmmo), 190, 100);
+  }
 }
-function playMission() {
+function drawPlayerWeapon() {
+  c.fillStyle = '#111827';
+  c.fillRect(player.position.x + player.width - 10, player.position.y + 74, 58, 8);
+  c.fillStyle = '#374151';
+  c.fillRect(player.position.x + player.width + 10, player.position.y + 82, 12, 18);
+}
+function drawBossHealth() {
+  if (!boss || !boss.alive) return;
+  c.fillStyle = 'rgba(0, 0, 0, 0.65)';
+  drawRoundedRect(612, 24, 370, 72, 12);
+  c.fill();
+  c.fillStyle = colors.white;
+  c.font = 'bold 18px Arial';
+  c.fillText("".concat(boss.name), 632, 50);
+  c.fillStyle = '#7f1d1d';
+  c.fillRect(632, 65, 315, 16);
+  c.fillStyle = '#22c55e';
+  c.fillRect(632, 65, 315 * (boss.health / boss.maxHealth), 16);
+  c.strokeStyle = colors.white;
+  c.strokeRect(632, 65, 315, 16);
+}
+function shootPlayerBullet() {
+  if (!player.hasWeapon || player.reloadTimer > 0 || player.shootTimer > 0) return;
+  if (player.ammo <= 0) {
+    player.reloadTimer = 90;
+    return;
+  }
+  bullets.push(new Bullet({
+    x: player.position.x + player.width + 40,
+    y: player.position.y + 78,
+    speed: 14
+  }));
+  player.ammo--;
+  player.shootTimer = 7;
+  if (player.ammo <= 0) player.reloadTimer = 90;
+}
+function moveWorld(amount) {
+  platforms.forEach(function (platformItem) {
+    platformItem.position.x += amount;
+  });
+  enemies.forEach(function (enemy) {
+    enemy.position.x += amount;
+    enemy.startX += amount;
+    enemy.endX += amount;
+  });
   genericObjects.forEach(function (genericObject) {
-    genericObject.draw();
+    genericObject.position.x += amount * 0.66;
   });
-  platforms.forEach(function (platform) {
-    platform.draw();
+  if (weaponPickup) weaponPickup.position.x += amount;
+  if (boss) boss.position.x += amount;
+  if (exitDoor) exitDoor.position.x += amount;
+  bullets.forEach(function (bullet) {
+    bullet.position.x += amount;
   });
-  player.update();
-  drawGameHud();
+  bossBullets.forEach(function (bullet) {
+    bullet.position.x += amount;
+  });
+}
+function handlePlayerMovement() {
   if (keys.right.pressed && player.position.x < 400) {
     player.velocity.x = player.speed;
   } else if (keys.left.pressed && player.position.x > 100 || keys.left.pressed && scrollOffset === 0 && player.position.x > 0) {
@@ -828,27 +1020,78 @@ function playMission() {
     player.velocity.x = 0;
     if (keys.right.pressed) {
       scrollOffset += player.speed;
-      platforms.forEach(function (platform) {
-        platform.position.x -= player.speed;
-      });
-      genericObjects.forEach(function (genericObject) {
-        genericObject.position.x -= player.speed * 0.66;
-      });
+      moveWorld(-player.speed);
     } else if (keys.left.pressed && scrollOffset > 0) {
       scrollOffset -= player.speed;
-      platforms.forEach(function (platform) {
-        platform.position.x += player.speed;
-      });
-      genericObjects.forEach(function (genericObject) {
-        genericObject.position.x += player.speed * 0.66;
-      });
+      moveWorld(player.speed);
     }
   }
-  platforms.forEach(function (platform) {
-    if (player.position.y + player.height <= platform.position.y && player.position.y + player.height + player.velocity.y >= platform.position.y && player.position.x + player.width >= platform.position.x && player.position.x <= platform.position.x + platform.width) {
+}
+function handlePlatformCollisions() {
+  player.canJump = false;
+  platforms.forEach(function (platformItem) {
+    if (player.position.y + player.height <= platformItem.position.y && player.position.y + player.height + player.velocity.y >= platformItem.position.y && player.position.x + player.width >= platformItem.position.x && player.position.x <= platformItem.position.x + platformItem.width) {
       player.velocity.y = 0;
+      player.position.y = platformItem.position.y - player.height;
+      player.canJump = true;
     }
   });
+}
+function handleEnemyCollisions() {
+  enemies.forEach(function (enemy) {
+    if (!enemy.alive) return;
+    if (!rectanglesTouch(player, enemy)) return;
+    var wasAboveEnemy = player.previousPosition.y + player.height <= enemy.position.y + 12;
+    if (wasAboveEnemy && player.velocity.y >= 0) {
+      enemy.alive = false;
+      player.velocity.y = -10;
+    } else {
+      init();
+    }
+  });
+}
+function handleWeaponBossAndDoor() {
+  if (weaponPickup && !weaponPickup.collected && rectanglesTouch(player, weaponPickup)) {
+    weaponPickup.collected = true;
+    player.hasWeapon = true;
+  }
+  if (player.hasWeapon && boss && boss.alive) {
+    shootPlayerBullet();
+  }
+  bullets.forEach(function (bullet) {
+    bullet.update();
+    if (boss && boss.alive && rectanglesTouch(bullet, boss)) {
+      boss.health -= 15;
+      bullet.active = false;
+      if (boss.health <= 0) {
+        boss.alive = false;
+        bossBullets = [];
+        if (exitDoor) exitDoor.open = true;
+      }
+    }
+  });
+  bossBullets.forEach(function (bullet) {
+    bullet.update();
+    if (rectanglesTouch(player, bullet)) {
+      bullet.active = false;
+      player.lives--;
+      if (player.lives <= 0) {
+        init();
+      }
+    }
+  });
+  if (exitDoor && exitDoor.open && rectanglesTouch(player, exitDoor)) {
+    unlockNextMission();
+    gameState = 'won';
+  }
+  bullets = bullets.filter(function (bullet) {
+    return bullet.active;
+  });
+  bossBullets = bossBullets.filter(function (bullet) {
+    return bullet.active;
+  });
+}
+function updateSprites() {
   if (keys.right.pressed && currentKey === 'right' && player.currentSprite !== player.sprites.run.right) {
     player.frames = 1;
     player.currentSprite = player.sprites.run.right;
@@ -870,16 +1113,44 @@ function playMission() {
     player.currentCropWidth = player.sprites.stand.cropWidth;
     player.width = player.sprites.stand.width;
   }
-  if (scrollOffset > difficulties[selectedDifficulty].winOffset) {
+}
+function playMission() {
+  genericObjects.forEach(function (genericObject) {
+    genericObject.draw();
+  });
+  platforms.forEach(function (platformItem) {
+    platformItem.draw();
+  });
+  enemies.forEach(function (enemy) {
+    enemy.update();
+  });
+  if (weaponPickup) weaponPickup.draw();
+  if (boss) boss.update();
+  if (exitDoor && (!boss || !boss.alive)) exitDoor.draw();
+  player.update();
+  drawGameHud();
+  handlePlayerMovement();
+  handlePlatformCollisions();
+  handleEnemyCollisions();
+  handleWeaponBossAndDoor();
+  updateSprites();
+  if (selectedMission !== 13 && scrollOffset > missionWinOffset) {
     unlockNextMission();
     gameState = 'won';
   }
-  if (player.position.y > canvas.height) {
+  var deathLine = 470;
+  if (player.position.y + player.height >= deathLine && !player.canJump) {
     init();
   }
 }
 function animate() {
+  var currentTime = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 0;
   requestAnimationFrame(animate);
+  var elapsed = currentTime - lastFrameTime;
+  if (elapsed < frameDelay) {
+    return;
+  }
+  lastFrameTime = currentTime - elapsed % frameDelay;
   c.fillStyle = 'white';
   c.fillRect(0, 0, canvas.width, canvas.height);
   if (gameState === 'start') {
@@ -906,9 +1177,15 @@ function animate() {
     genericObjects.forEach(function (genericObject) {
       genericObject.draw();
     });
-    platforms.forEach(function (platform) {
-      platform.draw();
+    platforms.forEach(function (platformItem) {
+      platformItem.draw();
     });
+    enemies.forEach(function (enemy) {
+      enemy.draw();
+    });
+    if (weaponPickup) weaponPickup.draw();
+    if (boss) boss.draw();
+    if (exitDoor) exitDoor.draw();
     player.draw();
     drawGameHud();
     drawWinScreen();
@@ -969,9 +1246,9 @@ addEventListener('click', function (event) {
     }
   }
 });
-addEventListener('keydown', function (_ref3) {
-  var keyCode = _ref3.keyCode,
-    repeat = _ref3.repeat;
+addEventListener('keydown', function (_ref8) {
+  var keyCode = _ref8.keyCode,
+    repeat = _ref8.repeat;
   if (repeat) return;
   switch (keyCode) {
     case 65:
@@ -987,8 +1264,10 @@ addEventListener('keydown', function (_ref3) {
       }
       break;
     case 87:
-      if (gameState === 'playing' && player.velocity.y === 0) {
+    case 32:
+      if (gameState === 'playing' && player.canJump) {
         player.velocity.y = -15;
+        player.canJump = false;
       }
       break;
     case 82:
@@ -1006,8 +1285,8 @@ addEventListener('keydown', function (_ref3) {
       break;
   }
 });
-addEventListener('keyup', function (_ref4) {
-  var keyCode = _ref4.keyCode;
+addEventListener('keyup', function (_ref9) {
+  var keyCode = _ref9.keyCode;
   switch (keyCode) {
     case 65:
       keys.left.pressed = false;

@@ -16,7 +16,10 @@ canvas.height = 576
 
 const gravity = 0.5
 const totalMissions = 13
+const targetFPS = 60
+const frameDelay = 1000 / targetFPS
 
+let lastFrameTime = 0
 let gameState = 'start'
 let selectedMission = 1
 let selectedDifficulty = 'easy'
@@ -44,6 +47,12 @@ const buttons = {
   menu: { x: 522, y: 345, width: 190, height: 54, text: 'MENU' }
 }
 
+const difficulties = {
+  easy: { label: 'EASY', speedBonus: 0, gapBonus: 0, enemyBonus: 0 },
+  normal: { label: 'NORMAL', speedBonus: 1, gapBonus: 70, enemyBonus: 1 },
+  hard: { label: 'HARD', speedBonus: 2, gapBonus: 130, enemyBonus: 2 }
+}
+
 const missionButtons = []
 
 for (let i = 1; i <= totalMissions; i++) {
@@ -60,32 +69,38 @@ for (let i = 1; i <= totalMissions; i++) {
   })
 }
 
-const difficulties = {
-  easy: {
-    label: 'EASY',
-    goal: 'Go from Point A to Point B',
-    winOffset: 7600
-  },
-  normal: {
-    label: 'NORMAL',
-    goal: 'Longer jumps and more holes',
-    winOffset: 8600
-  },
-  hard: {
-    label: 'HARD',
-    goal: 'Hard jumps and bigger gaps',
-    winOffset: 9600
-  }
-}
+const missionNames = [
+  'First Steps',
+  'Broken Road',
+  'Hill Runner',
+  'Sky Training',
+  'Long Jump',
+  'Enemy Patrol',
+  'Tall Towers',
+  'Fast Fighters',
+  'Danger Valley',
+  'Hard Climb',
+  'Last Bridge',
+  'Weapon Path',
+  'Final War'
+]
 
 class Player {
   constructor() {
-    this.speed = 10
+    this.speed = 8
     this.position = { x: 100, y: 100 }
+    this.previousPosition = { x: 100, y: 100 }
     this.velocity = { x: 0, y: 0 }
     this.width = 66
     this.height = 150
     this.frames = 0
+    this.canJump = false
+    this.lives = 3
+    this.hasWeapon = false
+    this.ammo = 30
+    this.maxAmmo = 30
+    this.reloadTimer = 0
+    this.shootTimer = 0
 
     this.sprites = {
       stand: {
@@ -118,24 +133,17 @@ class Player {
       this.width,
       this.height
     )
+
+    if (this.hasWeapon) drawPlayerWeapon()
   }
 
   update() {
+    this.previousPosition.x = this.position.x
+    this.previousPosition.y = this.position.y
+
     this.frames++
 
-    if (
-      this.frames > 28 &&
-      (this.currentSprite === this.sprites.stand.right ||
-        this.currentSprite === this.sprites.stand.left)
-    ) {
-      this.frames = 0
-    } else if (
-      this.frames > 28 &&
-      (this.currentSprite === this.sprites.run.right ||
-        this.currentSprite === this.sprites.run.left)
-    ) {
-      this.frames = 0
-    }
+    if (this.frames > 28) this.frames = 0
 
     this.draw()
     this.position.x += this.velocity.x
@@ -143,7 +151,18 @@ class Player {
 
     if (this.position.y + this.height + this.velocity.y <= canvas.height) {
       this.velocity.y += gravity
+      this.canJump = false
+    } else {
+      this.velocity.y = 0
+      this.canJump = true
     }
+
+    if (this.reloadTimer > 0) {
+      this.reloadTimer--
+      if (this.reloadTimer === 0) this.ammo = this.maxAmmo
+    }
+
+    if (this.shootTimer > 0) this.shootTimer--
   }
 }
 
@@ -170,6 +189,182 @@ class GenericObject {
 
   draw() {
     c.drawImage(this.image, this.position.x, this.position.y)
+  }
+}
+
+class Enemy {
+  constructor({ x, y, startX, endX, speed }) {
+    this.position = { x, y }
+    this.width = 52
+    this.height = 52
+    this.startX = startX
+    this.endX = endX
+    this.speed = speed
+    this.velocity = { x: speed }
+    this.alive = true
+  }
+
+  draw() {
+    if (!this.alive) return
+
+    c.fillStyle = '#7f1d1d'
+    drawRoundedRect(this.position.x, this.position.y, this.width, this.height, 10)
+    c.fill()
+
+    c.fillStyle = '#ffffff'
+    c.beginPath()
+    c.arc(this.position.x + 16, this.position.y + 18, 5, 0, Math.PI * 2)
+    c.arc(this.position.x + 36, this.position.y + 18, 5, 0, Math.PI * 2)
+    c.fill()
+  }
+
+  update() {
+    if (!this.alive) return
+
+    this.position.x += this.velocity.x
+
+    if (this.position.x <= this.startX || this.position.x + this.width >= this.endX) {
+      this.velocity.x *= -1
+    }
+
+    this.draw()
+  }
+}
+
+class WeaponPickup {
+  constructor({ x, y }) {
+    this.position = { x, y }
+    this.width = 90
+    this.height = 45
+    this.collected = false
+  }
+
+  draw() {
+    if (this.collected) return
+
+    c.fillStyle = '#facc15'
+    c.font = 'bold 18px Arial'
+    c.fillText('M4', this.position.x + 20, this.position.y - 12)
+
+    c.fillStyle = '#111827'
+    drawRoundedRect(this.position.x, this.position.y + 10, 68, 12, 3)
+    c.fill()
+
+    c.fillStyle = '#374151'
+    c.fillRect(this.position.x + 20, this.position.y + 22, 14, 20)
+    c.fillRect(this.position.x + 52, this.position.y + 7, 32, 6)
+
+    c.fillStyle = '#e5e7eb'
+    c.fillRect(this.position.x + 6, this.position.y + 13, 12, 6)
+  }
+}
+
+class Bullet {
+  constructor({ x, y, speed, fromBoss = false }) {
+    this.position = { x, y }
+    this.width = fromBoss ? 22 : 14
+    this.height = fromBoss ? 22 : 6
+    this.speed = speed
+    this.fromBoss = fromBoss
+    this.active = true
+  }
+
+  update() {
+    this.position.x += this.speed
+
+    if (this.position.x < -100 || this.position.x > canvas.width + 100) {
+      this.active = false
+    }
+
+    c.fillStyle = this.fromBoss ? '#ef4444' : '#facc15'
+
+    if (this.fromBoss) {
+      c.beginPath()
+      c.arc(this.position.x, this.position.y, this.width / 2, 0, Math.PI * 2)
+      c.fill()
+    } else {
+      c.fillRect(this.position.x, this.position.y, this.width, this.height)
+    }
+  }
+}
+
+class Boss {
+  constructor({ x, y }) {
+    this.name = 'Commander Rexon'
+    this.position = { x, y }
+    this.width = 135
+    this.height = 165
+    this.maxHealth = 150
+    this.health = this.maxHealth
+    this.shootTimer = 90
+    this.alive = true
+  }
+
+  draw() {
+    if (!this.alive) return
+
+    c.fillStyle = '#312e81'
+    drawRoundedRect(this.position.x, this.position.y, this.width, this.height, 18)
+    c.fill()
+
+    c.fillStyle = '#f8fafc'
+    c.fillRect(this.position.x + 30, this.position.y + 35, 18, 18)
+    c.fillRect(this.position.x + 87, this.position.y + 35, 18, 18)
+
+    c.fillStyle = '#dc2626'
+    c.fillRect(this.position.x + 35, this.position.y + 95, 65, 12)
+
+    drawBossHealth()
+  }
+
+  update() {
+    if (!this.alive) return
+
+    this.shootTimer--
+
+    if (this.shootTimer <= 0) {
+      bossBullets.push(
+        new Bullet({
+          x: this.position.x,
+          y: this.position.y + 78,
+          speed: -8,
+          fromBoss: true
+        })
+      )
+
+      this.shootTimer = 80
+    }
+
+    this.draw()
+  }
+}
+
+class Door {
+  constructor({ x, y }) {
+    this.position = { x, y }
+    this.width = 78
+    this.height = 118
+    this.open = false
+  }
+
+  draw() {
+    c.fillStyle = this.open ? '#22c55e' : '#475569'
+    drawRoundedRect(this.position.x, this.position.y, this.width, this.height, 10)
+    c.fill()
+
+    c.strokeStyle = '#f8fafc'
+    c.lineWidth = 4
+    drawRoundedRect(this.position.x, this.position.y, this.width, this.height, 10)
+    c.stroke()
+
+    c.fillStyle = '#facc15'
+    c.beginPath()
+    c.arc(this.position.x + 58, this.position.y + 62, 5, 0, Math.PI * 2)
+    c.fill()
+
+    c.fillStyle = '#ffffff'
+    c.font = 'bold 14px Arial'
+    c.fillText(this.open ? 'ENTER' : 'LOCKED', this.position.x + 9, this.position.y - 10)
   }
 }
 
@@ -234,6 +429,15 @@ function isInsideButton(mouse, button) {
   )
 }
 
+function rectanglesTouch(a, b) {
+  return (
+    a.position.x < b.position.x + b.width &&
+    a.position.x + a.width > b.position.x &&
+    a.position.y < b.position.y + b.height &&
+    a.position.y + a.height > b.position.y
+  )
+}
+
 function unlockNextMission() {
   if (selectedMission === unlockedMissionCount && unlockedMissionCount < totalMissions) {
     unlockedMissionCount++
@@ -292,8 +496,8 @@ function drawHelpScreen() {
   c.textAlign = 'center'
   c.fillText('A - Move Left', canvas.width / 2, 235)
   c.fillText('D - Move Right', canvas.width / 2, 280)
-  c.fillText('W - Jump', canvas.width / 2, 325)
-  c.fillText('Reach the end of the level to win.', canvas.width / 2, 390)
+  c.fillText('W / SPACE - Jump', canvas.width / 2, 325)
+  c.fillText('Stomp enemies. Mission 13 has the final boss.', canvas.width / 2, 390)
   c.textAlign = 'left'
 }
 
@@ -309,6 +513,7 @@ function drawMissionScreen() {
   missionButtons.forEach(button => {
     drawButton({
       ...button,
+      text: `${button.missionNumber}. ${missionNames[button.missionNumber - 1]}`,
       locked: button.missionNumber > unlockedMissionCount
     })
   })
@@ -336,7 +541,7 @@ function drawDifficultyScreen() {
   c.fillStyle = colors.white
   c.font = '22px Arial'
   c.textAlign = 'center'
-  c.fillText(`Mission ${selectedMission}`, canvas.width / 2, 185)
+  c.fillText(`Mission ${selectedMission}: ${missionNames[selectedMission - 1]}`, canvas.width / 2, 185)
   c.textAlign = 'left'
 
   drawButton(buttons.easy)
@@ -345,21 +550,19 @@ function drawDifficultyScreen() {
 }
 
 function drawWinScreen() {
-  const difficulty = difficulties[selectedDifficulty]
-
   c.fillStyle = 'rgba(0, 0, 0, 0.58)'
   c.fillRect(0, 0, canvas.width, canvas.height)
 
   c.fillStyle = colors.white
-  c.font = 'bold 72px Arial'
+  c.font = 'bold 60px Arial'
   c.textAlign = 'center'
-  c.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2 - 45)
+  c.fillText(selectedMission === 13 ? 'YOU WINNN!' : 'YOU WIN!', canvas.width / 2, canvas.height / 2 - 60)
 
-  c.font = '28px Arial'
+  c.font = 'bold 34px Arial'
   c.fillText(
-    `MISSION ${selectedMission} ${difficulty.label} COMPLETE`,
+    selectedMission === 13 ? 'CONGRATSS!' : `MISSION ${selectedMission} COMPLETE`,
     canvas.width / 2,
-    canvas.height / 2 + 20
+    canvas.height / 2
   )
 
   if (selectedMission < totalMissions) {
@@ -367,7 +570,7 @@ function drawWinScreen() {
     c.fillText(
       `MISSION ${selectedMission + 1} UNLOCKED`,
       canvas.width / 2,
-      canvas.height / 2 + 58
+      canvas.height / 2 + 50
     )
   }
 
@@ -382,9 +585,16 @@ let platformSmallTallImage = createImage(platformSmallTall)
 
 let player
 let platforms = []
+let enemies = []
 let genericObjects = []
+let bullets = []
+let bossBullets = []
+let weaponPickup = null
+let boss = null
+let exitDoor = null
 let currentKey
 let scrollOffset = 0
+let missionWinOffset = 7600
 
 const keys = {
   right: { pressed: false },
@@ -392,89 +602,71 @@ const keys = {
 }
 
 function createMissionPlatforms() {
-  if (selectedDifficulty === 'easy') {
-    return [
-      new Platform({ x: -1, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width - 3, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 2 + 180, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 3 + 180, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 4 + 550, y: 390, image: platformImage }),
-      new Platform({ x: platformImage.width * 5 + 550, y: 390, image: platformImage }),
-      new Platform({ x: platformImage.width * 6 + 950, y: 470, image: platformImage }),
+  const diff = difficulties[selectedDifficulty]
+  const mission = selectedMission
+  const length = mission === 13 ? 24 : 8 + mission
+  const platformsList = []
+
+  let x = -1
+
+  for (let i = 0; i < length; i++) {
+    const isTall = i > 2 && (i + mission) % 5 === 0
+    const baseGap =
+      mission === 13
+        ? 135 + diff.gapBonus * 0.45
+        : 120 + mission * 18 + diff.gapBonus
+    const gap = i < 2 ? -3 : baseGap + (i % 3) * 45
+    const yPattern = [470, 430, 390, 350, 470, 410, 320]
+    const y = i < 2 ? 470 : yPattern[(i + mission) % yPattern.length]
+
+    platformsList.push(
       new Platform({
-        x: platformImage.width * 7 + 950,
-        y: 270,
-        image: platformSmallTallImage
-      }),
-      new Platform({ x: platformImage.width * 8 + 1250, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 9 + 1250, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 10 + 1650, y: 350, image: platformImage }),
-      new Platform({ x: platformImage.width * 11 + 2050, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 12 + 2050, y: 470, image: platformImage }),
-      new Platform({
-        x: platformImage.width * 13 + 2350,
-        y: 300,
-        image: platformSmallTallImage
-      }),
-      new Platform({ x: platformImage.width * 14 + 2650, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 15 + 2650, y: 470, image: platformImage })
-    ]
+        x,
+        y: isTall ? y - 70 : y,
+        image: isTall ? platformSmallTallImage : platformImage
+      })
+    )
+
+    x += platformImage.width + gap
   }
 
-  if (selectedDifficulty === 'normal') {
-    return [
-      new Platform({ x: -1, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width - 3, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 2 + 300, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 3 + 480, y: 405, image: platformImage }),
-      new Platform({
-        x: platformImage.width * 4 + 850,
-        y: 290,
-        image: platformSmallTallImage
-      }),
-      new Platform({ x: platformImage.width * 5 + 1200, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 6 + 1500, y: 380, image: platformImage }),
-      new Platform({ x: platformImage.width * 7 + 1900, y: 470, image: platformImage }),
-      new Platform({
-        x: platformImage.width * 8 + 2150,
-        y: 300,
-        image: platformSmallTallImage
-      }),
-      new Platform({ x: platformImage.width * 9 + 2550, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 10 + 2900, y: 410, image: platformImage }),
-      new Platform({ x: platformImage.width * 11 + 3300, y: 470, image: platformImage }),
-      new Platform({ x: platformImage.width * 12 + 3650, y: 350, image: platformImage }),
-      new Platform({ x: platformImage.width * 13 + 4100, y: 470, image: platformImage })
-    ]
+  if (mission === 13) {
+    platformsList.push(new Platform({ x: x + 250, y: 470, image: platformImage }))
+    platformsList.push(new Platform({ x: x + 720, y: 430, image: platformImage }))
+    platformsList.push(new Platform({ x: x + 1190, y: 470, image: platformImage }))
+    platformsList.push(new Platform({ x: x + 1660, y: 470, image: platformImage }))
   }
 
-  return [
-    new Platform({ x: -1, y: 470, image: platformImage }),
-    new Platform({ x: platformImage.width + 250, y: 420, image: platformImage }),
-    new Platform({ x: platformImage.width * 2 + 650, y: 340, image: platformImage }),
-    new Platform({
-      x: platformImage.width * 3 + 1100,
-      y: 260,
-      image: platformSmallTallImage
-    }),
-    new Platform({ x: platformImage.width * 4 + 1500, y: 470, image: platformImage }),
-    new Platform({ x: platformImage.width * 5 + 1950, y: 390, image: platformImage }),
-    new Platform({
-      x: platformImage.width * 6 + 2350,
-      y: 280,
-      image: platformSmallTallImage
-    }),
-    new Platform({ x: platformImage.width * 7 + 2800, y: 470, image: platformImage }),
-    new Platform({ x: platformImage.width * 8 + 3250, y: 355, image: platformImage }),
-    new Platform({ x: platformImage.width * 9 + 3700, y: 470, image: platformImage }),
-    new Platform({
-      x: platformImage.width * 10 + 4100,
-      y: 270,
-      image: platformSmallTallImage
-    }),
-    new Platform({ x: platformImage.width * 11 + 4550, y: 420, image: platformImage }),
-    new Platform({ x: platformImage.width * 12 + 5000, y: 470, image: platformImage })
-  ]
+  missionWinOffset = mission === 13 ? x + 1700 : 4300 + mission * 700 + diff.gapBonus * 4
+  return platformsList
+}
+
+function createEnemies() {
+  const diff = difficulties[selectedDifficulty]
+  const mission = selectedMission
+  const enemiesList = []
+  const enemyCount = Math.min(2 + Math.floor(mission / 2) + diff.enemyBonus, mission === 13 ? 12 : 9)
+
+  for (let i = 0; i < enemyCount; i++) {
+    const platformIndex = 2 + i * 2
+
+    if (!platforms[platformIndex]) continue
+
+    const platformItem = platforms[platformIndex]
+    const enemyX = platformItem.position.x + 120
+
+    enemiesList.push(
+      new Enemy({
+        x: enemyX,
+        y: platformItem.position.y - 52,
+        startX: platformItem.position.x + 20,
+        endX: platformItem.position.x + platformItem.width - 20,
+        speed: 1.4 + mission * 0.12 + diff.speedBonus * 0.35
+      })
+    )
+  }
+
+  return enemiesList
 }
 
 function init() {
@@ -489,6 +681,37 @@ function init() {
   currentKey = null
 
   platforms = createMissionPlatforms()
+  enemies = createEnemies()
+  bullets = []
+  bossBullets = []
+
+  const weaponPlatform = selectedMission === 13 ? platforms[platforms.length - 4] : null
+  const bossPlatform = selectedMission === 13 ? platforms[platforms.length - 2] : null
+  const doorPlatform = selectedMission === 13 ? platforms[platforms.length - 1] : null
+
+  weaponPickup =
+    selectedMission === 13 && weaponPlatform
+      ? new WeaponPickup({
+        x: weaponPlatform.position.x + 180,
+        y: weaponPlatform.position.y - 58
+      })
+      : null
+
+  boss =
+    selectedMission === 13 && bossPlatform
+      ? new Boss({
+        x: bossPlatform.position.x + 215,
+        y: bossPlatform.position.y - 165
+      })
+      : null
+
+  exitDoor =
+    selectedMission === 13 && doorPlatform
+      ? new Door({
+        x: doorPlatform.position.x + 270,
+        y: doorPlatform.position.y - 118
+      })
+      : null
 
   genericObjects = [
     new GenericObject({
@@ -508,34 +731,111 @@ function drawGameHud() {
   const difficulty = difficulties[selectedDifficulty]
 
   c.fillStyle = 'rgba(15, 47, 120, 0.82)'
-  drawRoundedRect(20, 20, 315, 86, 14)
+  drawRoundedRect(20, 20, 355, 100, 14)
   c.fill()
 
   c.strokeStyle = colors.white
   c.lineWidth = 2
-  drawRoundedRect(20, 20, 315, 86, 14)
+  drawRoundedRect(20, 20, 355, 100, 14)
   c.stroke()
 
   c.fillStyle = colors.white
-  c.font = 'bold 20px Arial'
-  c.fillText(`MISSION ${selectedMission} - ${difficulty.label}`, 38, 52)
+  c.font = 'bold 18px Arial'
+  c.fillText(`MISSION ${selectedMission} - ${missionNames[selectedMission - 1]}`, 38, 50)
 
-  c.font = '16px Arial'
-  c.fillText(difficulty.goal, 38, 80)
+  c.font = '15px Arial'
+  c.fillText(`Difficulty: ${difficulty.label}`, 38, 76)
+  c.fillText(`Lives: ${player.lives}`, 38, 100)
+
+  if (player.hasWeapon) {
+    c.fillText(
+      player.reloadTimer > 0 ? 'Reloading...' : `M4 Ammo: ${player.ammo} / ${player.maxAmmo}`,
+      190,
+      100
+    )
+  }
 }
 
-function playMission() {
+function drawPlayerWeapon() {
+  c.fillStyle = '#111827'
+  c.fillRect(player.position.x + player.width - 10, player.position.y + 74, 58, 8)
+
+  c.fillStyle = '#374151'
+  c.fillRect(player.position.x + player.width + 10, player.position.y + 82, 12, 18)
+}
+
+function drawBossHealth() {
+  if (!boss || !boss.alive) return
+
+  c.fillStyle = 'rgba(0, 0, 0, 0.65)'
+  drawRoundedRect(612, 24, 370, 72, 12)
+  c.fill()
+
+  c.fillStyle = colors.white
+  c.font = 'bold 18px Arial'
+  c.fillText(`${boss.name}`, 632, 50)
+
+  c.fillStyle = '#7f1d1d'
+  c.fillRect(632, 65, 315, 16)
+
+  c.fillStyle = '#22c55e'
+  c.fillRect(632, 65, 315 * (boss.health / boss.maxHealth), 16)
+
+  c.strokeStyle = colors.white
+  c.strokeRect(632, 65, 315, 16)
+}
+
+function shootPlayerBullet() {
+  if (!player.hasWeapon || player.reloadTimer > 0 || player.shootTimer > 0) return
+
+  if (player.ammo <= 0) {
+    player.reloadTimer = 90
+    return
+  }
+
+  bullets.push(
+    new Bullet({
+      x: player.position.x + player.width + 40,
+      y: player.position.y + 78,
+      speed: 14
+    })
+  )
+
+  player.ammo--
+  player.shootTimer = 7
+
+  if (player.ammo <= 0) player.reloadTimer = 90
+}
+
+function moveWorld(amount) {
+  platforms.forEach(platformItem => {
+    platformItem.position.x += amount
+  })
+
+  enemies.forEach(enemy => {
+    enemy.position.x += amount
+    enemy.startX += amount
+    enemy.endX += amount
+  })
+
   genericObjects.forEach(genericObject => {
-    genericObject.draw()
+    genericObject.position.x += amount * 0.66
   })
 
-  platforms.forEach(platform => {
-    platform.draw()
+  if (weaponPickup) weaponPickup.position.x += amount
+  if (boss) boss.position.x += amount
+  if (exitDoor) exitDoor.position.x += amount
+
+  bullets.forEach(bullet => {
+    bullet.position.x += amount
   })
 
-  player.update()
-  drawGameHud()
+  bossBullets.forEach(bullet => {
+    bullet.position.x += amount
+  })
+}
 
+function handlePlayerMovement() {
   if (keys.right.pressed && player.position.x < 400) {
     player.velocity.x = player.speed
   } else if (
@@ -548,38 +848,95 @@ function playMission() {
 
     if (keys.right.pressed) {
       scrollOffset += player.speed
-
-      platforms.forEach(platform => {
-        platform.position.x -= player.speed
-      })
-
-      genericObjects.forEach(genericObject => {
-        genericObject.position.x -= player.speed * 0.66
-      })
+      moveWorld(-player.speed)
     } else if (keys.left.pressed && scrollOffset > 0) {
       scrollOffset -= player.speed
-
-      platforms.forEach(platform => {
-        platform.position.x += player.speed
-      })
-
-      genericObjects.forEach(genericObject => {
-        genericObject.position.x += player.speed * 0.66
-      })
+      moveWorld(player.speed)
     }
   }
+}
 
-  platforms.forEach(platform => {
+function handlePlatformCollisions() {
+  player.canJump = false
+
+  platforms.forEach(platformItem => {
     if (
-      player.position.y + player.height <= platform.position.y &&
-      player.position.y + player.height + player.velocity.y >= platform.position.y &&
-      player.position.x + player.width >= platform.position.x &&
-      player.position.x <= platform.position.x + platform.width
+      player.position.y + player.height <= platformItem.position.y &&
+      player.position.y + player.height + player.velocity.y >= platformItem.position.y &&
+      player.position.x + player.width >= platformItem.position.x &&
+      player.position.x <= platformItem.position.x + platformItem.width
     ) {
       player.velocity.y = 0
+      player.position.y = platformItem.position.y - player.height
+      player.canJump = true
+    }
+  })
+}
+
+function handleEnemyCollisions() {
+  enemies.forEach(enemy => {
+    if (!enemy.alive) return
+    if (!rectanglesTouch(player, enemy)) return
+
+    const wasAboveEnemy = player.previousPosition.y + player.height <= enemy.position.y + 12
+
+    if (wasAboveEnemy && player.velocity.y >= 0) {
+      enemy.alive = false
+      player.velocity.y = -10
+    } else {
+      init()
+    }
+  })
+}
+
+function handleWeaponBossAndDoor() {
+  if (weaponPickup && !weaponPickup.collected && rectanglesTouch(player, weaponPickup)) {
+    weaponPickup.collected = true
+    player.hasWeapon = true
+  }
+
+  if (player.hasWeapon && boss && boss.alive) {
+    shootPlayerBullet()
+  }
+
+  bullets.forEach(bullet => {
+    bullet.update()
+
+    if (boss && boss.alive && rectanglesTouch(bullet, boss)) {
+      boss.health -= 15
+      bullet.active = false
+
+      if (boss.health <= 0) {
+        boss.alive = false
+        bossBullets = []
+        if (exitDoor) exitDoor.open = true
+      }
     }
   })
 
+  bossBullets.forEach(bullet => {
+    bullet.update()
+
+    if (rectanglesTouch(player, bullet)) {
+      bullet.active = false
+      player.lives--
+
+      if (player.lives <= 0) {
+        init()
+      }
+    }
+  })
+
+  if (exitDoor && exitDoor.open && rectanglesTouch(player, exitDoor)) {
+    unlockNextMission()
+    gameState = 'won'
+  }
+
+  bullets = bullets.filter(bullet => bullet.active)
+  bossBullets = bossBullets.filter(bullet => bullet.active)
+}
+
+function updateSprites() {
   if (
     keys.right.pressed &&
     currentKey === 'right' &&
@@ -617,19 +974,56 @@ function playMission() {
     player.currentCropWidth = player.sprites.stand.cropWidth
     player.width = player.sprites.stand.width
   }
+}
 
-  if (scrollOffset > difficulties[selectedDifficulty].winOffset) {
+function playMission() {
+  genericObjects.forEach(genericObject => {
+    genericObject.draw()
+  })
+
+  platforms.forEach(platformItem => {
+    platformItem.draw()
+  })
+
+  enemies.forEach(enemy => {
+    enemy.update()
+  })
+
+  if (weaponPickup) weaponPickup.draw()
+  if (boss) boss.update()
+  if (exitDoor && (!boss || !boss.alive)) exitDoor.draw()
+
+  player.update()
+  drawGameHud()
+
+  handlePlayerMovement()
+  handlePlatformCollisions()
+  handleEnemyCollisions()
+  handleWeaponBossAndDoor()
+  updateSprites()
+
+  if (selectedMission !== 13 && scrollOffset > missionWinOffset) {
     unlockNextMission()
     gameState = 'won'
   }
 
-  if (player.position.y > canvas.height) {
+  const deathLine = 470
+
+  if (player.position.y + player.height >= deathLine && !player.canJump) {
     init()
   }
 }
 
-function animate() {
+function animate(currentTime = 0) {
   requestAnimationFrame(animate)
+
+  const elapsed = currentTime - lastFrameTime
+
+  if (elapsed < frameDelay) {
+    return
+  }
+
+  lastFrameTime = currentTime - (elapsed % frameDelay)
 
   c.fillStyle = 'white'
   c.fillRect(0, 0, canvas.width, canvas.height)
@@ -664,9 +1058,17 @@ function animate() {
       genericObject.draw()
     })
 
-    platforms.forEach(platform => {
-      platform.draw()
+    platforms.forEach(platformItem => {
+      platformItem.draw()
     })
+
+    enemies.forEach(enemy => {
+      enemy.draw()
+    })
+
+    if (weaponPickup) weaponPickup.draw()
+    if (boss) boss.draw()
+    if (exitDoor) exitDoor.draw()
 
     player.draw()
     drawGameHud()
@@ -753,8 +1155,10 @@ addEventListener('keydown', ({ keyCode, repeat }) => {
       break
 
     case 87:
-      if (gameState === 'playing' && player.velocity.y === 0) {
+    case 32:
+      if (gameState === 'playing' && player.canJump) {
         player.velocity.y = -15
+        player.canJump = false
       }
       break
 
