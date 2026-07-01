@@ -3,7 +3,7 @@ import spriteRunRight from '../../../img/spriteRunRight.png'
 import spriteStandLeft from '../../../img/spriteStandLeft.png'
 import spriteStandRight from '../../../img/spriteStandRight.png'
 
-import { c, canvas, gravity } from '../canvas.js'
+import { state } from '../gameState.js'
 import { createImage, drawRoundedRect } from '../utils.js'
 
 export class Player {
@@ -48,58 +48,58 @@ export class Player {
     const gunX = handX + 6
     const gunY = handY - 8
 
-    c.save()
+    state.c.save()
 
     // Arm / hand holding the gun
-    c.fillStyle = '#f2c9a0'
-    drawRoundedRect(c, handX - 12, handY - 2, 24, 12, 6)
-    c.fill()
+    state.c.fillStyle = '#f2c9a0'
+    drawRoundedRect(state.c, handX - 12, handY - 2, 24, 12, 6)
+    state.c.fill()
 
-    c.fillStyle = '#d8a06f'
-    drawRoundedRect(c, handX + 2, handY - 4, 16, 16, 6)
-    c.fill()
+    state.c.fillStyle = '#d8a06f'
+    drawRoundedRect(state.c, handX + 2, handY - 4, 16, 16, 6)
+    state.c.fill()
 
     // Gun body
-    c.fillStyle = '#111827'
-    drawRoundedRect(c, gunX, gunY, 54, 16, 5)
-    c.fill()
+    state.c.fillStyle = '#111827'
+    drawRoundedRect(state.c, gunX, gunY, 54, 16, 5)
+    state.c.fill()
 
     // Top metal shine
-    c.fillStyle = '#64748b'
-    c.fillRect(gunX + 8, gunY + 3, 28, 3)
+    state.c.fillStyle = '#64748b'
+    state.c.fillRect(gunX + 8, gunY + 3, 28, 3)
 
     // Barrel
-    c.fillStyle = '#030712'
-    c.fillRect(gunX + 50, gunY + 5, 24, 6)
+    state.c.fillStyle = '#030712'
+    state.c.fillRect(gunX + 50, gunY + 5, 24, 6)
 
     // Muzzle
-    c.fillStyle = '#38bdf8'
-    c.fillRect(gunX + 74, gunY + 4, 5, 8)
+    state.c.fillStyle = '#38bdf8'
+    state.c.fillRect(gunX + 74, gunY + 4, 5, 8)
 
     // Grip
-    c.fillStyle = '#374151'
-    drawRoundedRect(c, gunX + 16, gunY + 13, 12, 25, 4)
-    c.fill()
+    state.c.fillStyle = '#374151'
+    drawRoundedRect(state.c, gunX + 16, gunY + 13, 12, 25, 4)
+    state.c.fill()
 
     // Stock
-    c.fillStyle = '#1f2937'
-    drawRoundedRect(c, gunX - 13, gunY + 4, 18, 12, 4)
-    c.fill()
+    state.c.fillStyle = '#1f2937'
+    drawRoundedRect(state.c, gunX - 13, gunY + 4, 18, 12, 4)
+    state.c.fill()
 
     // Sight
-    c.strokeStyle = '#e5e7eb'
-    c.lineWidth = 2
-    c.beginPath()
-    c.moveTo(gunX + 24, gunY)
-    c.lineTo(gunX + 30, gunY - 8)
-    c.lineTo(gunX + 38, gunY)
-    c.stroke()
+    state.c.strokeStyle = '#e5e7eb'
+    state.c.lineWidth = 2
+    state.c.beginPath()
+    state.c.moveTo(gunX + 24, gunY)
+    state.c.lineTo(gunX + 30, gunY - 8)
+    state.c.lineTo(gunX + 38, gunY)
+    state.c.stroke()
 
-    c.restore()
+    state.c.restore()
   }
 
   draw() {
-    c.drawImage(
+    state.c.drawImage(
       this.currentSprite,
       this.currentCropWidth * this.frames,
       0,
@@ -126,8 +126,8 @@ export class Player {
     this.position.x += this.velocity.x
     this.position.y += this.velocity.y
 
-    if (this.position.y + this.height + this.velocity.y <= canvas.height) {
-      this.velocity.y += gravity
+    if (this.position.y + this.height + this.velocity.y <= state.canvas.height) {
+      this.velocity.y += state.gravity
       this.canJump = false
     } else {
       this.velocity.y = 0

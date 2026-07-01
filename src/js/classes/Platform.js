@@ -1,4 +1,4 @@
-import { c } from '../canvas.js'
+import { state } from '../gameState.js'
 
 export class Platform {
   constructor({ x, y, image }) {
@@ -9,6 +9,6 @@ export class Platform {
   }
 
   draw() {
-    c.drawImage(this.image, this.position.x, this.position.y)
+    state.c.drawImage(this.image, this.position.x, this.position.y)
   }
 }

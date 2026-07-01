@@ -1,4 +1,4 @@
-import { c, canvas } from '../canvas.js'
+import { state } from '../gameState.js'
 
 export class Bullet {
   constructor({ x, y, speed, fromBoss = false }) {
@@ -13,18 +13,18 @@ export class Bullet {
   update() {
     this.position.x += this.speed
 
-    if (this.position.x < -100 || this.position.x > canvas.width + 100) {
+    if (this.position.x < -100 || this.position.x > state.canvas.width + 100) {
       this.active = false
     }
 
-    c.fillStyle = this.fromBoss ? '#ef4444' : '#facc15'
+    state.c.fillStyle = this.fromBoss ? '#ef4444' : '#facc15'
 
     if (this.fromBoss) {
-      c.beginPath()
-      c.arc(this.position.x, this.position.y, this.width / 2, 0, Math.PI * 2)
-      c.fill()
+      state.c.beginPath()
+      state.c.arc(this.position.x, this.position.y, this.width / 2, 0, Math.PI * 2)
+      state.c.fill()
     } else {
-      c.fillRect(this.position.x, this.position.y, this.width, this.height)
+      state.c.fillRect(this.position.x, this.position.y, this.width, this.height)
     }
   }
 }

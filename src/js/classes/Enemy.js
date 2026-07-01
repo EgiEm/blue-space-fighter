@@ -1,4 +1,4 @@
-import { c } from '../canvas.js'
+import { state } from '../gameState.js'
 import { drawRoundedRect } from '../utils.js'
 
 export class Enemy {
@@ -16,15 +16,15 @@ export class Enemy {
   draw() {
     if (!this.alive) return
 
-    c.fillStyle = '#7f1d1d'
-    drawRoundedRect(c, this.position.x, this.position.y, this.width, this.height, 10)
-    c.fill()
+    state.c.fillStyle = '#7f1d1d'
+    drawRoundedRect(state.c, this.position.x, this.position.y, this.width, this.height, 10)
+    state.c.fill()
 
-    c.fillStyle = '#ffffff'
-    c.beginPath()
-    c.arc(this.position.x + 16, this.position.y + 18, 5, 0, Math.PI * 2)
-    c.arc(this.position.x + 36, this.position.y + 18, 5, 0, Math.PI * 2)
-    c.fill()
+    state.c.fillStyle = '#ffffff'
+    state.c.beginPath()
+    state.c.arc(this.position.x + 16, this.position.y + 18, 5, 0, Math.PI * 2)
+    state.c.arc(this.position.x + 36, this.position.y + 18, 5, 0, Math.PI * 2)
+    state.c.fill()
   }
 
   update() {

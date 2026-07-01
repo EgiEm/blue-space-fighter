@@ -1,4 +1,4 @@
-import { c, canvas } from '../canvas.js'
+import { state } from '../gameState.js'
 
 export class GenericObject {
   constructor({ x, y, image }) {
@@ -11,8 +11,8 @@ export class GenericObject {
   draw() {
     const startX = ((this.position.x % this.width) + this.width) % this.width - this.width
 
-    for (let x = startX; x < canvas.width + this.width; x += this.width) {
-      c.drawImage(this.image, x, this.position.y)
+    for (let x = startX; x < state.canvas.width + this.width; x += this.width) {
+      state.c.drawImage(this.image, x, this.position.y)
     }
   }
 }

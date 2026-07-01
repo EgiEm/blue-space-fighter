@@ -1,4 +1,4 @@
-import { c } from '../canvas.js'
+import { state } from '../gameState.js'
 import { drawRoundedRect } from '../utils.js'
 
 export class WeaponPickup {
@@ -12,19 +12,19 @@ export class WeaponPickup {
   draw() {
     if (this.collected) return
 
-    c.fillStyle = '#facc15'
-    c.font = 'bold 18px Arial'
-    c.fillText('M4', this.position.x + 20, this.position.y - 12)
+    state.c.fillStyle = '#facc15'
+    state.c.font = 'bold 18px Arial'
+    state.c.fillText('M4', this.position.x + 20, this.position.y - 12)
 
-    c.fillStyle = '#111827'
-    drawRoundedRect(c, this.position.x, this.position.y + 10, 68, 12, 3)
-    c.fill()
+    state.c.fillStyle = '#111827'
+    drawRoundedRect(state.c, this.position.x, this.position.y + 10, 68, 12, 3)
+    state.c.fill()
 
-    c.fillStyle = '#374151'
-    c.fillRect(this.position.x + 20, this.position.y + 22, 14, 20)
-    c.fillRect(this.position.x + 52, this.position.y + 7, 32, 6)
+    state.c.fillStyle = '#374151'
+    state.c.fillRect(this.position.x + 20, this.position.y + 22, 14, 20)
+    state.c.fillRect(this.position.x + 52, this.position.y + 7, 32, 6)
 
-    c.fillStyle = '#e5e7eb'
-    c.fillRect(this.position.x + 6, this.position.y + 13, 12, 6)
+    state.c.fillStyle = '#e5e7eb'
+    state.c.fillRect(this.position.x + 6, this.position.y + 13, 12, 6)
   }
 }

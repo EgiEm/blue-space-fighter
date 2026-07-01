@@ -1,4 +1,4 @@
-import { c, bossBullets, colors } from '../canvas.js'
+import { state } from '../gameState.js'
 import { drawRoundedRect } from '../utils.js'
 import { Bullet } from './Bullet.js'
 
@@ -17,37 +17,37 @@ export class Boss {
   drawBossHealth() {
     if (!this.alive) return
 
-    c.fillStyle = 'rgba(0, 0, 0, 0.65)'
-    drawRoundedRect(c, 612, 24, 370, 72, 12)
-    c.fill()
+    state.c.fillStyle = 'rgba(0, 0, 0, 0.65)'
+    drawRoundedRect(state.c, 612, 24, 370, 72, 12)
+    state.c.fill()
 
-    c.fillStyle = colors.white
-    c.font = 'bold 18px Arial'
-    c.fillText(`${this.name}`, 632, 50)
+    state.c.fillStyle = state.colors.white
+    state.c.font = 'bold 18px Arial'
+    state.c.fillText(`${this.name}`, 632, 50)
 
-    c.fillStyle = '#7f1d1d'
-    c.fillRect(632, 65, 315, 16)
+    state.c.fillStyle = '#7f1d1d'
+    state.c.fillRect(632, 65, 315, 16)
 
-    c.fillStyle = '#22c55e'
-    c.fillRect(632, 65, 315 * (this.health / this.maxHealth), 16)
+    state.c.fillStyle = '#22c55e'
+    state.c.fillRect(632, 65, 315 * (this.health / this.maxHealth), 16)
 
-    c.strokeStyle = colors.white
-    c.strokeRect(632, 65, 315, 16)
+    state.c.strokeStyle = state.colors.white
+    state.c.strokeRect(632, 65, 315, 16)
   }
 
   draw() {
     if (!this.alive) return
 
-    c.fillStyle = '#312e81'
-    drawRoundedRect(c, this.position.x, this.position.y, this.width, this.height, 18)
-    c.fill()
+    state.c.fillStyle = '#312e81'
+    drawRoundedRect(state.c, this.position.x, this.position.y, this.width, this.height, 18)
+    state.c.fill()
 
-    c.fillStyle = '#f8fafc'
-    c.fillRect(this.position.x + 30, this.position.y + 35, 18, 18)
-    c.fillRect(this.position.x + 87, this.position.y + 35, 18, 18)
+    state.c.fillStyle = '#f8fafc'
+    state.c.fillRect(this.position.x + 30, this.position.y + 35, 18, 18)
+    state.c.fillRect(this.position.x + 87, this.position.y + 35, 18, 18)
 
-    c.fillStyle = '#dc2626'
-    c.fillRect(this.position.x + 35, this.position.y + 95, 65, 12)
+    state.c.fillStyle = '#dc2626'
+    state.c.fillRect(this.position.x + 35, this.position.y + 95, 65, 12)
 
     this.drawBossHealth()
   }
@@ -58,7 +58,7 @@ export class Boss {
     this.shootTimer--
 
     if (this.shootTimer <= 0) {
-      bossBullets.push(
+      state.bossBullets.push(
         new Bullet({
           x: this.position.x,
           y: this.position.y + 78,
